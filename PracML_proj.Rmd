@@ -1,0 +1,158 @@
+---
+title: "Pract_Mac_Lrng"
+author: "Harsha"
+date: "Sunday, May 01, 2016"
+output: html_document
+---
+*Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+*Obtain the files
+
+
+```{r, echo=TRUE}
+library(caret)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+
+set.seed(123)
+
+traindata <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), head = T)
+testdata <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), head = T)
+
+dim(traindata)
+dim(testdata)
+
+```
+
+*Training data exploration
+```{r, echo=TRUE}
+summary(traindata)
+```
+From summary we find that there are few columns with NAs. This needs to be removed as they are not going to help in model.
+
+*Splitting data and Filtering relevant columns
+The training data is split for training and testing. As advised in the lectures, the data is split 60% for training and 40% for validation
+
+sptrain - split training
+modtraining - model training
+
+```{r, echo=TRUE}
+sptrain <- createDataPartition(y=traindata$classe, p=0.6, list=FALSE)
+modtraining <- traindata[sptrain, ]
+modtesting <- traindata[-sptrain, ]
+dim(modtraining)
+dim(modtesting)
+
+```
+
+Code to remove columns with NAs. It's done in both training data and test data
+
+```{r, echo=TRUE}
+noNA <- function(x) {
+    as.vector(apply(x, 2, function(x) length(which(!is.na(x)))))
+}
+
+colcnts <- noNA(modtraining)
+rem <- c()
+for (cnt in 1:length(colcnts)) {
+    if (colcnts[cnt] < nrow(modtraining)) {
+        rem <- c(rem, colnames(modtraining)[cnt])
+    }
+}
+
+modtraining <- modtraining[,!(names(modtraining) %in% rem)]
+modtesting <- modtesting[,!(names(modtesting) %in% rem)]
+testdata <- testdata[,!(names(testdata) %in% rem)]
+
+
+```
+
+Removal of near zero variable and the first column
+
+Coericing of the given test data is also done to ensure that the machine learning alorithm runs fine
+
+```{r, echo=TRUE}
+nzv <- nearZeroVar(modtraining, saveMetrics = F)
+nzv
+
+NOnzvmodtr <- modtraining[,-nzv]
+NOnzvmodts <- modtesting[,-nzv]
+testdata <- testdata[,-nzv]
+
+NOnzvmodtr <- NOnzvmodtr[c(-1)]
+NOnzvmodts <- NOnzvmodts[c(-1)]
+testdata <- testdata[c(-1)]
+testdata <- testdata[c(-58)]
+
+dim(NOnzvmodtr)
+dim(NOnzvmodts)
+dim(testdata)
+
+for (i in 1:length(testdata) ) {
+        for(j in 1:length(NOnzvmodtr)) {
+        if( length( grep(names(NOnzvmodtr[i]), names(testdata)[j]) ) ==1)  {
+            class(testdata[j]) <- class(NOnzvmodtr[i])
+        }      
+    }      
+}
+
+testdata <- rbind(NOnzvmodtr[2, -58] , testdata) 
+testdata <- testdata[-1,]
+
+```
+
+*Machine Learning
+
+Two methods would be tried for this - Decidion tree and random forests
+
+
+```{r, echo=TRUE}
+model1 <- rpart(classe ~ ., data=NOnzvmodtr, method="class")
+
+prediction1 <- predict(model1, NOnzvmodts, type = "class")
+
+confusionMatrix(prediction1, NOnzvmodts$classe)
+
+
+fancyRpartPlot(model1)
+```
+With Trees, we get an accuracy of 86%
+
+Random forests
+```{r, echo=TRUE}
+model2 <- randomForest(classe ~. , data=NOnzvmodtr)
+
+prediction2 <- predict(model2, NOnzvmodts, type = "class")
+
+confusionMatrix(prediction2, NOnzvmodts$classe)
+
+
+```
+With Random forests we get an accuracy of 99% So we can conclude that random forest is a better method.
+
+*Trying the model with test data
+
+```{r, echo=TRUE}
+
+
+
+print(predict(model2, newdata=testdata))
+
+
+
+
+
+```
